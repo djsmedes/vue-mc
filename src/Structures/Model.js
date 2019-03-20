@@ -3,6 +3,7 @@ import Base             from './Base.js'
 import Collection       from './Collection.js'
 import ResponseError    from '../Errors/ResponseError.js'
 import ValidationError  from '../Errors/ValidationError.js'
+import { defineModelStore } from '../Vuex/module'
 import castArray from 'lodash/castArray'
 import cloneDeep from 'lodash/cloneDeep'
 import defaults from 'lodash/defaults'
@@ -146,6 +147,9 @@ class Model extends Base {
 
         // Cache mutator pipelines so that they can run as a single function.
         this.compileMutators();
+
+        // Set up vuex integration if present
+        this.storeIntegrate();
 
         // Assign all given model data to the model's attributes and reference.
         this.assign(attributes);
@@ -1169,6 +1173,15 @@ class Model extends Base {
             Vue.set(this, 'deleting', true);
             resolve(Base.REQUEST_CONTINUE);
         });
+    }
+
+    /**
+     * Called during initialization
+     *
+     * @returns undefined
+     */
+    storeIntegrate() {
+        defineModelStore(this.getOption("store"), this.getOption("storeKey"))
     }
 }
 
