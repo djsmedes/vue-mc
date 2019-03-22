@@ -20,6 +20,7 @@ import uniqueId from 'lodash/uniqueId'
 const REQUEST_CONTINUE  = 0;
 const REQUEST_REDUNDANT = 1;
 const REQUEST_SKIP      = 2;
+const REQUEST_CACHED    = 3;
 
 /**
  * Base class for all things common between Model and Collection.
@@ -485,6 +486,10 @@ class Base {
                         onSuccess(null);
                         resolve(null);
                         return;
+                    case REQUEST_CACHED:
+                        onSuccess(null, true);
+                        resolve(null);
+                        return;
                 }
 
                 // Support passing the request configuration as a function, to allow
@@ -635,5 +640,6 @@ class Base {
 Base.REQUEST_CONTINUE  = REQUEST_CONTINUE;
 Base.REQUEST_REDUNDANT = REQUEST_REDUNDANT;
 Base.REQUEST_SKIP      = REQUEST_SKIP;
+Base.REQUEST_CACHED    = REQUEST_CACHED;
 
 export default Base;
