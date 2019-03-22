@@ -315,7 +315,9 @@ class Collection extends Base {
      */
     onAdd(model) {
         model.registerCollection(this);
-        model.storeSync();
+        if (!this.isCached) {
+            model.sync();
+        }
         this.addModelToRegistry(model);
         this.emit('add', {model});
     }
@@ -996,13 +998,10 @@ class Collection extends Base {
      * @param {Object} response
      * @param {boolean} cached
      */
-    onFetchSuccess(response, cached = false) {
-        let models = [];
-        if (cached) {
-            models = this.getCachedModels();
-        } else {
-            models = this.getModelsFromResponse(response);
-        }
+    onFetchSuccess(response) {
+        let models = this.isCached
+            ? this.getCachedModels()
+            : this.getModelsFromResponse(response);
 
         // There is no sensible alternative to an array here, so anything else
         // is considered an exception that indicates an unexpected state.
@@ -1023,6 +1022,7 @@ class Collection extends Base {
             this.storeCacheFilter();
             Vue.delete(this, 'storeCacheFilter');
         }
+
         Vue.set(this, 'loading', false);
         Vue.set(this, 'fatal',   false);
 
@@ -1056,22 +1056,27 @@ class Collection extends Base {
                 return resolve(Base.REQUEST_SKIP);
             }
 
-            if (this.getOption('store')) {
-                let cacheFilter = checkFilterCache(this.getOption('storeKey'), this.getOption('storeFilter'));
-                if (cacheFilter) {
-                    Vue.set(this, 'storeCacheFilter', cacheFilter);
-                } else {
-                    // checkFilterCache returns null if data relevant to the filter has already been cached
-                    resolve(Base.REQUEST_CACHED);
-                    return;
-                }
+            if (this.isCached) {
+                return resolve(Base.REQUEST_CACHED);
             }
 
             // Because we're fetching new data, we can assume that this collection
             // is now loading. This allows the template to indicate a loading state.
             Vue.set(this, 'loading', true);
-            resolve(Base.REQUEST_CONTINUE);
+            return resolve(Base.REQUEST_CONTINUE);
         });
+    }
+
+    get isCached() {
+        if (this.storeCacheFilter || !this.getOption('store')) {
+            return false;
+        }
+        let cacheFilter = checkFilterCache(this.getOption('storeKey'), this.getOption('storeFilter'))
+        if (cacheFilter) {
+            Vue.set(this, 'storeCacheFilter', cacheFilter);
+            return false;
+        }
+        return true;
     }
 
     /**

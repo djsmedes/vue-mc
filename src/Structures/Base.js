@@ -487,7 +487,7 @@ class Base {
                         resolve(null);
                         return;
                     case REQUEST_CACHED:
-                        onSuccess(null, true);
+                        onSuccess(null);
                         resolve(null);
                         return;
                 }

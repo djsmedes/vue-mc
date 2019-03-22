@@ -54,6 +54,7 @@ const RESERVED = invert([
     'memoized',
     'models',
     'saving',
+    'cached',
 ]);
 
 /**
@@ -101,7 +102,46 @@ class Model extends Base {
      * @returns {Object} This model's saved, reference data.
      */
     get $() {
-        return this._reference;
+        return this._cachedReference || this._reference;
+    }
+    _setReference(data) {
+        if (this.store && this.identifier()) {
+            this.store.commit('$_vue-mc_' + this.getOption('storeKey') + '/UPDATE', {
+                identifier: this.identifier(),
+                reference: data,
+            });
+            Vue.set(this, '_reference', {})
+        } else {
+            Vue.set(this, '_reference', data)
+        }
+    }
+    _setReferenceSubset(data, attribute) {
+        if (this.store && this.identifier()) {
+            this._setReference(merge({}, this.$, pick(data, castArray(attribute))))
+        } else {
+            each(castArray(attribute), (attribute) => {
+                Vue.set(this._reference, attribute, get(data, attribute));
+            });
+        }
+    }
+
+    get isCached() {
+        return Boolean(this._cachedReference);
+    }
+
+    /**
+     * @returns {*} the cached _reference from vuex store, or a falsy value if there is none (could be null, '', or undefined)
+     * @private
+     */
+    get _cachedReference() {
+        return this.store && this.identifier() && get(
+            this.store,
+            [
+                'state',
+                '$_vue-mc_' + this.getOption('storeKey'),
+                this.identifier(),
+            ]
+        )
     }
 
     /**
@@ -182,7 +222,7 @@ class Model extends Base {
 
         // Clone all attributes and their descriptors.
         copyFrom(this._attributes, attributes);
-        copyFrom(this._reference, reference);
+        copyFrom(this.$, reference);
 
         // Create a copy.
         let clone = new (this.constructor)();
@@ -373,8 +413,7 @@ class Model extends Base {
         let defaults = this.defaults();
 
         Vue.set(this, '_attributes', cloneDeep(defaults));
-        Vue.set(this, '_reference',  cloneDeep(defaults));
-        this.storeSync();
+        this._setReference(cloneDeep(defaults));
     }
 
     /**
@@ -426,11 +465,11 @@ class Model extends Base {
 
         // Reset specific attributes.
         if (attribute) {
-            copyFrom(this._reference, this._attributes, castArray(attribute));
+            copyFrom(this.$, this._attributes, castArray(attribute));
 
         // Reset all attributes if one or more specific ones were not given.
         } else {
-            copyFrom(this._reference, this._attributes);
+            copyFrom(this.$, this._attributes);
         }
 
         this.clearErrors();
@@ -494,15 +533,10 @@ class Model extends Base {
 
         // Sync either specific attributes or all attributes if none provided.
         if (isUndefined(attribute)) {
-            Vue.set(this, '_reference', active);
-
+            this._setReference(active);
         } else {
-            each(castArray(attribute), (attribute) => {
-                Vue.set(this._reference, attribute, get(active, attribute));
-            });
+            this._setReferenceSubset(active, attribute);
         }
-
-        this.storeSync();
 
         this.emit('sync');
     }
@@ -633,7 +667,7 @@ class Model extends Base {
      * @returns {*} The value of the attribute or `fallback` if not found.
      */
     saved(attribute, fallback) {
-        return get(this._reference, attribute, fallback);
+        return get(this.$, attribute, fallback);
     }
 
     /**
@@ -778,13 +812,13 @@ class Model extends Base {
     /**
      * Called when a fetch request was successful.
      */
-    onFetchSuccess(response, cached = false) {
-        let attributes = {};
-        if (cached) {
-            attributes = this.getCachedAttributes();
-        } else {
-            attributes = response.getData();
+    onFetchSuccess(response) {
+        if (this.isCached) {
+            this.reset();
+            return;
         }
+
+        let attributes = response.getData();
 
         // A fetch request must receive *some* data in return.
         if (isEmpty(attributes)) {
@@ -1122,9 +1156,8 @@ class Model extends Base {
                 return resolve(Base.REQUEST_SKIP);
             }
 
-            if (this.getCachedAttributes()) {
-                resolve(Base.REQUEST_CACHED);
-                return;
+            if (this.isCached) {
+                return resolve(Base.REQUEST_CACHED);
             }
 
             Vue.set(this, 'loading', true);
@@ -1216,21 +1249,8 @@ class Model extends Base {
     }
 
     /**
-     * Called after making a change to this._reference to make sure vuex store is up to date
-     *
-     * @returns {undefined}
-     */
-    storeSync() {
-        if (this.store && this.identifier()) {
-            this.store.commit('$_vue-mc_' + this.getOption('storeKey') + '/UPDATE', {
-                identifier: this.identifier(),
-                reference: this._reference,
-            });
-        }
-    }
-
-    /**
-     * Called after deleting a model
+     * Called after deleting a model, but before unsetting its attributes
+     *   (identifier is needed to find and remove correct data from vuex store)
      *
      * @returns {undefined}
      */
@@ -1239,12 +1259,6 @@ class Model extends Base {
             this.store.commit('$_vue-mc_' + this.getOption('storeKey') + '/REMOVE', {
                 identifier: this.identifier(),
             })
-        }
-    }
-
-    getCachedAttributes() {
-        if (this.store) {
-            return get(this.store, ['state', '$_vue-mc_' + this.getOption('storeKey'), this.identifier()])
         }
     }
 }
