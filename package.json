@@ -1,6 +1,6 @@
 {
-    "name": "vue-mc",
-    "version": "0.5.0",
+    "name": "@encamp/vue-mc",
+    "version": "1.0.0",
     "description": "",
     "license": "MIT",
     "main": "vue-mc.js",
@@ -20,18 +20,15 @@
         "vue-mc.js",
         "vue-mc.es.js"
     ],
-    "bugs": {
-        "url": "https://github.com/FiguredLimited/vue-mc/issues"
-    },
-    "homepage": "https://github.com/FiguredLimited/vue-mc",
+    "homepage": "https://github.com/Encamp/vue-mc",
     "repository": {
         "type": "git",
-        "url": "https://github.com/FiguredLimited/vue-mc.git"
+        "url": "https://github.com/Encamp/vue-mc.git"
     },
     "author": {
-        "name": "Rudi Theunissen",
-        "email": "rudi.theunissen@figured.com",
-        "url": "https://github.com/rtheunissen"
+        "name": "Daniel Smedema",
+        "email": "djsmedes@gmail.com",
+        "url": "https://github.com/djsmedes"
     },
     "dependencies": {
         "date-fns": "^2.0.0-alpha.27",
