@@ -4,38 +4,37 @@ import Model            from './Model.js'
 import ResponseError    from '../Errors/ResponseError.js'
 import ValidationError  from '../Errors/ValidationError.js'
 import ProxyResponse    from '../HTTP/ProxyResponse.js'
-import {
-    countBy,
-    defaultsDeep,
-    each,
-    filter,
-    find,
-    findIndex,
-    first,
-    get,
-    has,
-    isArray,
-    isEmpty,
-    isFunction,
-    isNil,
-    isObject,
-    isPlainObject,
-    join,
-    keyBy,
-    last,
-    map,
-    max,
-    merge,
-    method,
-    reduce,
-    set,
-    size,
-    sortBy,
-    sumBy,
-    toSafeInteger,
-    unset,
-    values,
-} from 'lodash'
+import { checkFilterCache} from '../Vuex/module'
+import countBy from 'lodash/countBy'
+import defaultsDeep from 'lodash/defaultsDeep'
+import each from 'lodash/each'
+import filter from 'lodash/filter'
+import find from 'lodash/find'
+import findIndex from 'lodash/findIndex'
+import first from 'lodash/first'
+import get from 'lodash/get'
+import has from 'lodash/has'
+import isArray from 'lodash/isArray'
+import isEmpty from 'lodash/isEmpty'
+import isFunction from 'lodash/isFunction'
+import isNil from 'lodash/isNil'
+import isObject from 'lodash/isObject'
+import isPlainObject from 'lodash/isPlainObject'
+import join from 'lodash/join'
+import keyBy from 'lodash/keyBy'
+import last from 'lodash/last'
+import map from 'lodash/map'
+import max from 'lodash/max'
+import merge from 'lodash/merge'
+import method from 'lodash/method'
+import reduce from 'lodash/reduce'
+import set from 'lodash/set'
+import size from 'lodash/size'
+import sortBy from 'lodash/sortBy'
+import sumBy from 'lodash/sumBy'
+import toSafeInteger from 'lodash/toSafeInteger'
+import unset from 'lodash/unset'
+import values from 'lodash/values'
 
     /**
  * Used as a marker to indicate that pagination is not enabled.
@@ -67,6 +66,8 @@ class Collection extends Base {
      */
     constructor(models = [], options = {}, attributes = {}) {
         super(options);
+        // storeKey default has to be set after this.model is set
+        this.setOption('storeKey', this.getOption('storeKey') || this.createModel().$class);
 
         Vue.set(this, 'models', []);      // Model store.
         Vue.set(this, '_attributes', {}); // Property store.
@@ -163,6 +164,15 @@ class Collection extends Base {
             // Whether this collection should send model identifiers as JSON
             // in the body of a delete request, instead of a query parameter.
             useDeleteBody: true,
+
+            // the vuex store (optional)
+            store: null,
+
+            // the key in the vuex store to look under for the model or collection
+            storeKey: null,
+
+            // The filter to run on the vuex store (if there is one) to get the elements of this collection
+            storeFilter: {},
         });
     }
 
@@ -305,6 +315,9 @@ class Collection extends Base {
      */
     onAdd(model) {
         model.registerCollection(this);
+        if (!this.isCached) {
+            model.sync();
+        }
         this.addModelToRegistry(model);
         this.emit('add', {model});
     }
@@ -983,11 +996,14 @@ class Collection extends Base {
      * Called when a fetch request was successful.
      *
      * @param {Object} response
+     * @param {boolean} cached
      */
     onFetchSuccess(response) {
-        let models = this.getModelsFromResponse(response);
+        let models = this.isCached
+            ? this.getCachedModels()
+            : this.getModelsFromResponse(response);
 
-        // There is no sensible alternative to an array here, so anyting else
+        // There is no sensible alternative to an array here, so anything else
         // is considered an exception that indicates an unexpected state.
         if ( ! isArray(models)) {
             throw new ResponseError('Expected an array of models in fetch response');
@@ -1000,6 +1016,11 @@ class Collection extends Base {
         // Replace all current models with the fetched ones.
         } else {
             this.replace(models);
+        }
+
+        if (this.storeCacheFilter) {
+            this.storeCacheFilter();
+            Vue.delete(this, 'storeCacheFilter');
         }
 
         Vue.set(this, 'loading', false);
@@ -1035,12 +1056,27 @@ class Collection extends Base {
                 return resolve(Base.REQUEST_SKIP);
             }
 
+            if (this.isCached) {
+                return resolve(Base.REQUEST_CACHED);
+            }
+
             // Because we're fetching new data, we can assume that this collection
             // is now loading. This allows the template to indicate a loading state.
             Vue.set(this, 'loading', true);
-            resolve(Base.REQUEST_CONTINUE);
-            return;
+            return resolve(Base.REQUEST_CONTINUE);
         });
+    }
+
+    get isCached() {
+        if (this.storeCacheFilter || !this.getOption('store')) {
+            return false;
+        }
+        let cacheFilter = checkFilterCache(this.getOption('storeKey'), this.getOption('storeFilter'))
+        if (cacheFilter) {
+            Vue.set(this, 'storeCacheFilter', cacheFilter);
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -1188,6 +1224,11 @@ class Collection extends Base {
      */
     toArray() {
         return this.map(model => model.toJSON());
+    }
+
+    getCachedModels() {
+        let objects = this.getOption('store').state['$_vue-mc_' + this.getOption('storeKey')];
+        return filter(Object.values(objects), this.getOption('storeFilter'));
     }
 }
 
